@@ -10,6 +10,9 @@
 		.chat-height {
 			height: 400px;
 		}
+		#chat-messages {
+			overflow-y: auto;
+		}
 	</style>
 </head>
 <body class="p-3">
@@ -23,7 +26,7 @@
 
 		<div class="row mt-3">
 			<div class="col-md-9">
-				<div id="chat-messages" class="border p-3 bg-light overflow-auto chat-height">
+				<div id="chat-messages" class="border p-3 bg-light chat-height">
 				</div>
 			</div>
 			<div class="col-md-3">
@@ -68,6 +71,11 @@
 			console.log('WebSocket connection established');
 		};
 
+		function scrollToBottom() {
+			const chatMessages = $('#chat-messages');
+			chatMessages.scrollTop(chatMessages[0].scrollHeight);
+		}
+
 		function updateUserList(users) {
 			$('#user-list').empty();
 			users.sort();
@@ -101,6 +109,7 @@
 				if (data.messages.length > 0) {
 					$('#chat-messages').append('<div class="mb-2 text-muted fst-italic small">--- End History ---</div>');
 				}
+				// scrollToBottom();
 			} else if (data.type === 'user_list') {
 				// Initial user list when connecting
 				updateUserList(data.users);
@@ -109,20 +118,22 @@
 					.text(data.username + ' has joined the chat');
 				$('#chat-messages').append(joinMessage);
 				updateUserList(data.users);
+				// scrollToBottom();
 			} else if (data.type === 'user_leave') {
 				const leaveMessage = $('<div class="mb-2 text-muted fst-italic"></div>')
 					.text(data.username + ' has left the chat');
 				$('#chat-messages').append(leaveMessage);
 				updateUserList(data.users);
+				// scrollToBottom();
 			} else if (data.type === 'message') {
 				const messageDiv = $('<div class="mb-2"></div>');
 				const usernameSpan = $('<strong></strong>').text(data.username + ': ');
 				const messageText = $('<span></span>').text(data.message);
 				messageDiv.append(usernameSpan).append(messageText);
 				$('#chat-messages').append(messageDiv);
+				// scrollToBottom();
 			}
-			
-			$('#chat-messages').scrollTop($('#chat-messages')[0].scrollHeight);
+			scrollToBottom();
 		};
 
 		chatSocket.onclose = function(e) {

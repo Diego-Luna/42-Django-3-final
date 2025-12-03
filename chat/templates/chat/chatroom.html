@@ -5,6 +5,12 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Chat - {{ room_name }}</title>
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+	<style>
+		.chat-height {
+			height: 400px;
+		}
+	</style>
 </head>
 <body class="p-3">
 	<div class="container-fluid">
@@ -16,8 +22,15 @@
 		</div>
 
 		<div class="row mt-3">
-			<div class="col-12">
-				<div id="chat-messages" class="border p-3 bg-light" style="height: 400px; overflow-y: auto;">
+			<div class="col-md-9">
+				<div id="chat-messages" class="border p-3 bg-light overflow-auto chat-height">
+				</div>
+			</div>
+			<div class="col-md-3">
+				<div class="border p-3 bg-white chat-height">
+					<h5 class="mb-3">Connected Users</h5>
+					<ul id="user-list" class="list-unstyled">
+					</ul>
 				</div>
 			</div>
 		</div>
@@ -42,7 +55,6 @@
 	</div>
 
 	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.08/dist/js/bootstrap.bundle.min.js"></script>
 	
 	<script>
 		const roomName = "{{ room_name }}";
@@ -55,6 +67,23 @@
 		chatSocket.onopen = function(e) {
 			console.log('WebSocket connection established');
 		};
+
+		function updateUserList(users) {
+			$('#user-list').empty();
+			users.sort();
+			users.forEach(function(user) {
+				const userItem = $('<li class="mb-2"></li>');
+				const userIcon = $('<i class="bi bi-person-fill me-2"></i>');
+				const userName = $('<span></span>').text(user);
+				
+				if (user === username) {
+					userName.addClass('fw-bold text-primary');
+				}
+				
+				userItem.append(userIcon).append(userName);
+				$('#user-list').append(userItem);
+			});
+		}
 
 		chatSocket.onmessage = function(e) {
 			const data = JSON.parse(e.data);
@@ -72,10 +101,19 @@
 				if (data.messages.length > 0) {
 					$('#chat-messages').append('<div class="mb-2 text-muted fst-italic small">--- End History ---</div>');
 				}
+			} else if (data.type === 'user_list') {
+				// Initial user list when connecting
+				updateUserList(data.users);
 			} else if (data.type === 'user_join') {
 				const joinMessage = $('<div class="mb-2 text-muted fst-italic"></div>')
 					.text(data.username + ' has joined the chat');
 				$('#chat-messages').append(joinMessage);
+				updateUserList(data.users);
+			} else if (data.type === 'user_leave') {
+				const leaveMessage = $('<div class="mb-2 text-muted fst-italic"></div>')
+					.text(data.username + ' has left the chat');
+				$('#chat-messages').append(leaveMessage);
+				updateUserList(data.users);
 			} else if (data.type === 'message') {
 				const messageDiv = $('<div class="mb-2"></div>');
 				const usernameSpan = $('<strong></strong>').text(data.username + ': ');

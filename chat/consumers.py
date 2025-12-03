@@ -5,6 +5,8 @@ from .models import Chatroom, Message
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
+	# * Class-level dictionary to track connected users per room
+	connected_users = {}
 	async def connect(self):
 		self.room_name = self.scope['url_route']['kwargs']['room_name']
 		self.room_group_name = f'chat_{self.room_name}'
@@ -21,6 +23,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 		await self.accept()
 
+		# ! Add user to connected users list for this room
+		if self.room_group_name not in ChatConsumer.connected_users:
+			ChatConsumer.connected_users[self.room_group_name] = set()
+		ChatConsumer.connected_users[self.room_group_name].add(self.user.username)
+
 		# * Send last 3 messages as history
 		history = await self.get_message_history()
 		if history:
@@ -29,16 +36,42 @@ class ChatConsumer(AsyncWebsocketConsumer):
 				'messages': history
 			}))
 
+		# ! Send current user list to the newly connected user
+		await self.send(text_data=json.dumps({
+			'type': 'user_list',
+			'users': list(ChatConsumer.connected_users[self.room_group_name])
+		}))
+
+		# ! Notify all users in the room that a new user joined
 		await self.channel_layer.group_send(
 			self.room_group_name,
 			{
 				'type': 'user_join',
-				'username': self.user.username
+				'username': self.user.username,
+				'users': list(ChatConsumer.connected_users[self.room_group_name])
 			}
 		)
 
 	async def disconnect(self, close_code):
-		if hasattr(self, 'room_group_name'):
+		if hasattr(self, 'room_group_name') and hasattr(self, 'user'):
+			# * Remove user from connected users list
+			if self.room_group_name in ChatConsumer.connected_users:
+				ChatConsumer.connected_users[self.room_group_name].discard(self.user.username)
+				
+				# ! Notify all users that this user left
+				await self.channel_layer.group_send(
+					self.room_group_name,
+					{
+						'type': 'user_leave',
+						'username': self.user.username,
+						'users': list(ChatConsumer.connected_users[self.room_group_name])
+					}
+				)
+				
+				# ! Clean up empty room
+				if not ChatConsumer.connected_users[self.room_group_name]:
+					del ChatConsumer.connected_users[self.room_group_name]
+			
 			await self.channel_layer.group_discard(
 				self.room_group_name,
 				self.channel_name
@@ -71,7 +104,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
 	async def user_join(self, event):
 		await self.send(text_data=json.dumps({
 			'type': 'user_join',
-			'username': event['username']
+			'username': event['username'],
+			'users': event['users']
+		}))
+
+	async def user_leave(self, event):
+		await self.send(text_data=json.dumps({
+			'type': 'user_leave',
+			'username': event['username'],
+			'users': event['users']
+		}))
+
+	async def user_list(self, event):
+		await self.send(text_data=json.dumps({
+			'type': 'user_list',
+			'users': event['users']
 		}))
 
 	@database_sync_to_async
